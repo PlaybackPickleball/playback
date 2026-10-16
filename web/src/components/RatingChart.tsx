@@ -4,8 +4,9 @@ export function RatingChart({ points, label }: { points: { at: string; rating: n
   const height = 140;
   const pad = 16;
   const ratings = points.map((point) => point.rating);
-  const min = Math.min(...ratings) - 10;
-  const max = Math.max(...ratings) + 10;
+  const padY = Math.max(...ratings) > 20 ? 10 : 0.15;
+  const min = Math.min(...ratings) - padY;
+  const max = Math.max(...ratings) + padY;
   const span = Math.max(1, max - min);
   const coords = points.map((point, index) => {
     const x = pad + (points.length === 1 ? (width - pad * 2) / 2 : (index / (points.length - 1)) * (width - pad * 2));

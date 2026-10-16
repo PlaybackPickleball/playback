@@ -1,5 +1,16 @@
 import type { MessageKey } from './en';
 
+export function formatRating(value: number): string {
+  return (Math.round(value * 100) / 100).toFixed(2);
+}
+
+export function formatRatingDelta(value: number): string {
+  const text = formatRating(Math.abs(value));
+  if (value > 0) return `+${text}`;
+  if (value < 0) return `-${text}`;
+  return text;
+}
+
 export function matchStatusLabel(status: string, t: (key: MessageKey) => string): string {
   const key =
     status === 'scheduled'

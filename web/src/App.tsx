@@ -5,6 +5,7 @@ import { CourtPage } from './pages/CourtPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { FacilitySetupPage } from './pages/FacilitySetupPage';
 import { HomePage } from './pages/HomePage';
+import { LeaderboardPage } from './pages/LeaderboardPage';
 import { NotFoundPage } from './pages/NotFoundPage';
 import { PersonPage } from './pages/PersonPage';
 import { RecordPage } from './pages/RecordPage';
@@ -13,6 +14,7 @@ import { SetupPage } from './pages/SetupPage';
 import { MatchmakingPage } from './pages/MatchmakingPage';
 import { PlayerPage } from './pages/PlayerPage';
 import { PlayersPage } from './pages/PlayersPage';
+import { PlayNowPage } from './pages/PlayNowPage';
 import { ResultPage } from './pages/ResultPage';
 import { SamplePlayerReportPage } from './pages/SamplePlayerReportPage';
 import { SettingsPage } from './pages/SettingsPage';
@@ -47,10 +49,12 @@ const router = createBrowserRouter([
       { path: 'dashboard', element: <DashboardPage /> },
       { path: 'facility/setup', element: <FacilitySetupPage /> },
       { path: 'players', element: <PlayersPage /> },
+      { path: 'leaderboard', element: <LeaderboardPage /> },
       { path: 'players/sample-report', element: <SamplePlayerReportPage /> },
       { path: 'players/:playerId', element: <PlayerPage /> },
       { path: 'matches/:matchId', element: <ResultPage /> },
       { path: 'matchmaking', element: <MatchmakingPage /> },
+      { path: 'play', element: <PlayNowPage /> },
       { path: 'settings', element: <SettingsPage /> },
       { path: 'people/:personId', element: <PersonPage /> },
       { path: '*', element: <NotFoundPage /> },

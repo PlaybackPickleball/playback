@@ -63,7 +63,7 @@ describe('player intelligence', () => {
     expect(players.length).toBeGreaterThanOrEqual(8);
     const byId = (id: string) => players.find((player) => player.id === id)!;
     const lan = byId('demo-lan');
-    expect(lan.rating).toBe(1680);
+    expect(lan.rating).toBeCloseTo(4.4, 2);
 
     const sessionsBefore = Number(
       (running.store.db.prepare('SELECT COUNT(*) AS n FROM sessions').get() as { n: number | bigint }).n,
@@ -126,9 +126,41 @@ describe('player intelligence', () => {
     );
     expect(saved.status).toBe('completed');
     expect(saved.ratingsApplied).toBe(false);
-    expect((await json(await fetch(`${base}/api/players/demo-lan`))).rating).toBe(1680);
+    expect((await json(await fetch(`${base}/api/players/demo-lan`))).rating).toBeCloseTo(4.4, 2);
 
-    const verifiedResponse = await fetch(`${base}/api/matches/${matchId}/verify`, { method: 'POST' });
+    const blockedVerify = await fetch(`${base}/api/matches/${matchId}/verify`, { method: 'POST' });
+    expect(blockedVerify.status).toBe(409);
+    expect((await json(await fetch(`${base}/api/players/demo-lan`))).rating).toBeCloseTo(4.4, 2);
+
+    const submitted = await json(
+      await fetch(`${base}/api/matches/${matchId}/result`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          playerId: 'demo-lan',
+          teamA: ['demo-lan', 'demo-an'],
+          teamB: ['demo-quang', 'demo-mai'],
+          scoreA: 11,
+          scoreB: 7,
+          target: 11,
+        }),
+      }),
+    );
+    expect(submitted.resultStatus).toBe('pending');
+    expect(submitted.ratingsApplied).toBe(false);
+
+    const ownSide = await fetch(`${base}/api/matches/${matchId}/result/confirm`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ playerId: 'demo-lan' }),
+    });
+    expect(ownSide.status).toBe(409);
+
+    const verifiedResponse = await fetch(`${base}/api/matches/${matchId}/result/confirm`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ playerId: 'demo-quang' }),
+    });
     expect(verifiedResponse.status).toBe(200);
     const verified = await json(verifiedResponse);
     expect(verified.status).toBe('verified');
@@ -138,15 +170,20 @@ describe('player intelligence', () => {
     expect(job).toMatchObject({ status: 'unavailable', events: [], confidence: null, modelVersion: null });
 
     const lanAfter = await json(await fetch(`${base}/api/players/demo-lan`));
-    expect(lanAfter.rating).not.toBe(1680);
+    expect(Math.abs(lanAfter.rating - 4.4)).toBeGreaterThan(0.001);
     expect(lanAfter.wins).toBe(1);
     expect(lanAfter.matchesPlayed).toBe(1);
     expect(lanAfter.history).toHaveLength(1);
     expect(lanAfter.simulatedAnalytics).toMatchObject({ demo: true });
     expect(lanAfter.unmeasured).toEqual({ serveSpeed: null, shotPlacement: null, movement: null });
 
-    const again = await fetch(`${base}/api/matches/${matchId}/verify`, { method: 'POST' });
-    expect(again.status).toBe(409);
+    const again = await fetch(`${base}/api/matches/${matchId}/result/confirm`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ playerId: 'demo-mai' }),
+    });
+    expect(again.status).toBe(200);
+    expect((await json(again)).replayed).toBe(true);
     expect((await json(await fetch(`${base}/api/players/demo-lan`))).rating).toBe(lanAfter.rating);
 
     const refused = await fetch(`${base}/api/players/demo-lan`, {
@@ -180,7 +217,7 @@ describe('player intelligence', () => {
       }),
     );
     expect(reset.recordingsKept).toBe(true);
-    expect((await json(await fetch(`${base}/api/players/demo-lan`))).rating).toBe(1680);
+    expect((await json(await fetch(`${base}/api/players/demo-lan`))).rating).toBeCloseTo(4.4, 2);
     const sessionsAfter = Number(
       (running.store.db.prepare('SELECT COUNT(*) AS n FROM sessions').get() as { n: number | bigint }).n,
     );

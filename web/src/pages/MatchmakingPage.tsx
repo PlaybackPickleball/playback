@@ -4,6 +4,7 @@ import { ApiError } from '../api';
 import { listClubPlayers, recommendPairings, type ClubPlayer, type MatchmakingResult } from '../clubApi';
 import { Button, Card } from '../components/Ui';
 import { useI18n } from '../i18n/context';
+import { formatRating } from '../i18n/format';
 
 export function MatchmakingPage() {
   const { t } = useI18n();
@@ -28,6 +29,11 @@ export function MatchmakingPage() {
     <main className="mx-auto w-full max-w-3xl px-4 py-8">
       <h1 className="text-3xl font-semibold">{t('matchmaking')}</h1>
       <p className="mt-2 text-sm leading-6 text-muted">{t('matchmakingHelp')}</p>
+      <p className="mt-3 text-sm">
+        <Link to="/play" data-testid="matchmaking-play" className="inline-flex min-h-11 items-center font-semibold text-accent-dark underline underline-offset-2">
+          {t('pnTitle')}
+        </Link>
+      </p>
       <ul className="mt-4 grid gap-2">
         {players.map((player) => (
           <li key={player.id}>
@@ -36,7 +42,7 @@ export function MatchmakingPage() {
                 <input data-testid={`pick-${player.id}`} type="checkbox" className="mr-2" checked={picked.includes(player.id)} onChange={() => toggle(player.id)} />
                 {player.displayName}
               </span>
-              <span className="text-sm">PIR {player.rating}</span>
+              <span className="text-sm tabular-nums">{formatRating(player.rating)}</span>
             </label>
           </li>
         ))}

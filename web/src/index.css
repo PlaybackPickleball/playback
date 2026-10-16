@@ -116,6 +116,10 @@ input[type='radio'] {
   z-index: 2;
 }
 
+.nav-tile img {
+  transform: none;
+}
+
 .tap-screen {
   overflow-x: clip;
 }

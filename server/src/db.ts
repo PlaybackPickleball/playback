@@ -97,6 +97,7 @@ export class Store {
   constructor(databasePath: string) {
     fs.mkdirSync(path.dirname(databasePath), { recursive: true });
     this.db = new DatabaseSync(databasePath);
+    this.db.exec('PRAGMA busy_timeout = 5000;');
     this.db.exec('PRAGMA journal_mode = WAL;');
     this.db.exec('PRAGMA foreign_keys = ON;');
     this.db.exec(SCHEMA);

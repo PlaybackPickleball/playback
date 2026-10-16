@@ -1,4 +1,4 @@
-import { confidence } from '../pir.js';
+import { confidence, toPlayback } from '../pir.js';
 import { haversineKm, type LatLng } from '../geo.js';
 
 /**
@@ -87,8 +87,8 @@ const pct = (n: number) => Math.round(clamp01(n) * 100);
 const localMs = (value: string) => Date.parse(`${value.slice(0, 16)}:00Z`);
 const minutesOf = (hhmm: string) => Number(hhmm.slice(0, 2)) * 60 + Number(hhmm.slice(3, 5));
 
-/** Same scale the demo data uses: PIR 1500 is level 3.5, 200 PIR points per level. */
-export const levelFromPir = (pir: number) => 3.5 + (pir - 1500) / 200;
+/** Playback Rating on the 2.0–5.0 scale. A legacy Elo integer (1500 = 3.50, 200 points per level) still converts. */
+export const levelFromPir = (pir: number) => toPlayback(pir);
 export const displayLevel = (pir: number) => round1(levelFromPir(pir));
 export const confidenceOf = (matchesPlayed: number) => confidence(matchesPlayed);
 export const isProvisional = (matchesPlayed: number) => matchesPlayed < 5;

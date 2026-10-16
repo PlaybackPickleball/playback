@@ -48,18 +48,19 @@ Method: file names, short greps, test titles. An item is "completed" only if a p
 
 - Sample player report (web only, demo data): route `/players/sample-report` (`SamplePlayerReportPage.tsx`), EN "Sample player report" / VI "Báo cáo người chơi mẫu", linked from Home, Players and the player profile. All data is fictional and lives in `web/src/demo/samplePlayerReport.ts`; wins, losses, win rate, streak, rating total, best partner and toughest opponent are derived from the match list in `samplePlayerStats.ts`. It never calls the API or touches player, match or rating tables. Computer-vision stats (serve consistency, shot placement, unforced errors, court positioning, movement, ball speed) are locked "Not available yet" cards with no numbers. Strings are `sr*` keys in `en.ts`/`vi.ts`. Test: `samplePlayerStats.test.ts` (6). `RatingChart` got an optional `label` prop. Playwright not run.
 
+- Leaderboard and Play Now screens: `/leaderboard` uses the existing `GET /api/leaderboard` (overall and facility, rank, name, rating, confidence, verified matches; competitive rows need 5 verified matches; opted-out players omitted; not sorted by win rate; provisional rows are separate). Linked from `/players` and the player page. `/play` calls `POST /api/play/search` and shows join an existing game, build a game, and join the queue. Join uses `POST /api/play/open-matches/:id/join` and does not write ratings. The demo user picks a seeded demo player (`x-player-id`). Opt-out was already `players.leaderboard_opt_out` (default opted in). EN/VI keys are `pn*`.
+
 ## Partial
 
 - Players and demo players: player CRUD in `club.ts`/`club-routes.ts` and a hard-coded `DEMO_PLAYERS` list in `PlayerPage.tsx` (client side). The 12 extra demo players are now seeded server-side (see Seed data and facilities). The e2e "simulated doubles" test covers use.
 - Player dashboard: `PlayerPage` (rating chart, history) and `DashboardPage` (facility/person view) exist. No unit test, and e2e coverage was not re-run.
-- Seed data: done (see Completed). Slots and bookings: server done (job 4), no UI. Play Now search and open matches: server done (job 5), no UI. Smart Queue: server done (job 6), no UI. Smart Court Fill: server done (job 7), no UI.
+- Seed data: done (see Completed). Slots and bookings: server done (job 4), no UI. Play Now has a screen at `/play`. Smart Queue is still server-only except the queue group on that screen. Smart Court Fill: server done (job 7), no UI.
 - Facility owner setup: `/facility/setup` opens on today’s empty courts; one Promote tap publishes that slot as an open game at the promo price (turns Smart Fill on for the tap when saved rules allow, or saves demo defaults when rules are missing). Hours, discount, and queue stay lower on the page.
 - Facility revenue views: the server summary is `GET /api/play/admin/smart-fill/summary` (see Smart Court Fill). `DashboardPage` still counts saved sessions only (`realDataNote`: "There is no sample revenue") and was not changed.
 - Doubles serve reminder: no serve-reminder code or string found (`rg -i serve` matches only "server" and "serve speed"). Treat as partial or not started. The plan claims it is untouched, but I could not confirm it.
 
 ## Not started
 
-- Play Now UI.
 - Notifications.
 - Numbered play migrations (`000_legacy_repair` to `005_demo_seed`). Revenue attribution itself is the `revenue_attributions` table in job 7, not those files. `PLAYBACK_UPGRADE_PLAN.md` is unchanged. The camera start-command queue in `station.ts` is a different thing and is unchanged.
 - Doubles serve reminder (see Partial).
@@ -76,3 +77,4 @@ Method: file names, short greps, test titles. An item is "completed" only if a p
 - A backup of the SQLite file exists at `data/backups/court-replay-20261015-221326.db`.
 - Older `players` tables missing `demo`, `guest`, `latitude`, `longitude`, or `home_facility_id` are altered in place by `ensureClubSchema` before seed (legacy `is_demo`/`is_guest` copied when present; no drop). Backup: `data/court-replay-pre-columns-20261016-072952.db`. Test: `demoSeed.test.ts` ("migrates an old players table without demo, latitude, longitude, or home_facility_id and still seeds").
 - `club.ts` is the single source of truth for player ids. The unwired `intelStore.ts`/`intelRoutes.ts` draft (duplicate `players` table) was deleted; nothing imported it. Checks after this change: typecheck passes, server 41 tests, web 24 tests.
+- Top menu is six photo buttons in two rows of three (Play now, Record, Leaderboard / Player's list, Club Owner, My stats), EN/VI, same routes. Underlays are adult Asian pickleball photos; the leaderboard tile is a 1-2-3 ranked list.

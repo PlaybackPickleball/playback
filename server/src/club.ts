@@ -8,7 +8,6 @@ import {
   playerCheckInUrl,
   removePlayer,
   rosterStatus,
-  verifyGuard,
   type MatchMode,
   type MatchStatus,
   type RosterSlot,
@@ -17,7 +16,15 @@ import {
 import { DEMO_FACILITY_ID, DEMO_FACILITY_NAME, ensureDemoSchema, seedDemoPlay } from './demoSeed.js';
 import { seedPromotionRules } from './play/fillSchema.js';
 import { recommendDoubles } from './matchmaking.js';
-import { applyMatchResult, confidence, PIR_START, type PirPlayer } from './pir.js';
+import {
+  PIR_START,
+  categoryOf,
+  confidenceBand,
+  isProvisional,
+  startingRating,
+  toPlayback,
+  type StartCategory,
+} from './pir.js';
 import { emptyVideoJob } from './videoJob.js';
 
 export { DEMO_FACILITY_ID, DEMO_FACILITY_NAME };
@@ -42,15 +49,16 @@ type Seed = {
   equipment: string | null;
 };
 
+// Playback Rating on the 2.0–5.0 scale. minh 3.40, an 3.50, khoa 3.60, ha 3.70 are the confirm-result demo.
 const SEED: Seed[] = [
-  { id: 'demo-minh', displayName: 'Minh Trần', language: 'vi', skill: 'intermediate', hand: 'right', rating: 1520, equipment: null },
-  { id: 'demo-lan', displayName: 'Lan Phạm', language: 'vi', skill: 'advanced', hand: 'right', rating: 1680, equipment: 'Demo paddle' },
-  { id: 'demo-an', displayName: 'An Nguyễn', language: 'vi', skill: 'intermediate', hand: 'left', rating: 1410, equipment: null },
-  { id: 'demo-khoa', displayName: 'Khoa Lê', language: 'vi', skill: 'intermediate', hand: 'right', rating: 1595, equipment: null },
-  { id: 'demo-ha', displayName: 'Hà Vũ', language: 'vi', skill: 'beginner', hand: 'either', rating: 1550, equipment: null },
-  { id: 'demo-quang', displayName: 'Quang Đỗ', language: 'vi', skill: 'advanced', hand: 'right', rating: 1710, equipment: null },
-  { id: 'demo-mai', displayName: 'Mai Bùi', language: 'en', skill: 'beginner', hand: 'right', rating: 1380, equipment: null },
-  { id: 'demo-tuan', displayName: 'Tuấn Hoàng', language: 'vi', skill: 'advanced', hand: 'left', rating: 1605, equipment: null },
+  { id: 'demo-minh', displayName: 'Minh Trần', language: 'vi', skill: 'intermediate', hand: 'right', rating: 3.4, equipment: null },
+  { id: 'demo-lan', displayName: 'Lan Phạm', language: 'vi', skill: 'advanced', hand: 'right', rating: 4.4, equipment: 'Demo paddle' },
+  { id: 'demo-an', displayName: 'An Nguyễn', language: 'vi', skill: 'intermediate', hand: 'left', rating: 3.5, equipment: null },
+  { id: 'demo-khoa', displayName: 'Khoa Lê', language: 'vi', skill: 'intermediate', hand: 'right', rating: 3.6, equipment: null },
+  { id: 'demo-ha', displayName: 'Hà Vũ', language: 'vi', skill: 'intermediate', hand: 'either', rating: 3.7, equipment: null },
+  { id: 'demo-quang', displayName: 'Quang Đỗ', language: 'vi', skill: 'advanced', hand: 'right', rating: 4.55, equipment: null },
+  { id: 'demo-mai', displayName: 'Mai Bùi', language: 'en', skill: 'beginner', hand: 'right', rating: 2.9, equipment: null },
+  { id: 'demo-tuan', displayName: 'Tuấn Hoàng', language: 'vi', skill: 'advanced', hand: 'left', rating: 4.03, equipment: null },
 ];
 
 /** Under this many matches a PIR rating is provisional. */
@@ -72,6 +80,7 @@ CREATE TABLE IF NOT EXISTS players (
   recording_consent_at TEXT,
   demo INTEGER NOT NULL DEFAULT 0,
   guest INTEGER NOT NULL DEFAULT 0,
+  leaderboard_opt_out INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
@@ -93,6 +102,11 @@ CREATE TABLE IF NOT EXISTS matches (
   verified_at TEXT,
   ratings_applied INTEGER NOT NULL DEFAULT 0,
   simulated INTEGER NOT NULL DEFAULT 0,
+  result_status TEXT NOT NULL DEFAULT 'none',
+  submitted_by TEXT,
+  confirmed_by TEXT,
+  disputed_by TEXT,
+  score_target INTEGER,
   updated_at TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS match_players (
@@ -109,6 +123,12 @@ CREATE TABLE IF NOT EXISTS rating_history (
   confidence_before REAL NOT NULL,
   confidence_after REAL NOT NULL,
   created_at TEXT NOT NULL,
+  algorithm_version TEXT,
+  delta REAL,
+  won INTEGER,
+  explanation TEXT,
+  band_before TEXT,
+  band_after TEXT,
   PRIMARY KEY (match_id, player_id)
 );
 CREATE UNIQUE INDEX IF NOT EXISTS rating_history_once ON rating_history(match_id, player_id);
@@ -142,6 +162,7 @@ type PlayerRow = {
   recording_consent_at: string | null;
   demo: number | bigint;
   guest: number | bigint;
+  leaderboard_opt_out?: number | bigint;
   latitude?: number | null;
   longitude?: number | null;
   home_facility_id?: string | null;
@@ -165,6 +186,11 @@ type MatchRow = {
   verified_at: string | null;
   ratings_applied: number | bigint;
   simulated: number | bigint;
+  result_status?: string | null;
+  submitted_by?: string | null;
+  confirmed_by?: string | null;
+  disputed_by?: string | null;
+  score_target?: number | bigint | null;
   updated_at: string;
 };
 
@@ -190,6 +216,10 @@ function equipmentOf(raw: string | null): Equipment | null {
 
 function presentPlayer(row: PlayerRow, publicBaseUrl: string) {
   const played = n(row.matches_played);
+  const wins = n(row.wins);
+  const losses = n(row.losses);
+  const rating = toPlayback(n(row.pir_rating));
+  const decided = wins + losses;
   return {
     id: row.id,
     displayName: row.display_name,
@@ -197,17 +227,21 @@ function presentPlayer(row: PlayerRow, publicBaseUrl: string) {
     language: row.language,
     skill: row.skill,
     preferredHand: row.preferred_hand,
-    rating: n(row.pir_rating),
-    confidence: confidence(played),
-    wins: n(row.wins),
-    losses: n(row.losses),
+    rating,
+    category: categoryOf(rating),
+    confidence: confidenceBand(played),
+    wins,
+    losses,
     matchesPlayed: played,
+    winRate: decided === 0 ? null : wins / decided,
     equipment: equipmentOf(row.equipment_json),
     equipmentConsentAt: row.equipment_consent_at,
     recordingConsentAt: row.recording_consent_at,
     demo: Number(row.demo) === 1 || row.id.startsWith('demo-'),
     guest: Number(row.guest) === 1,
-    provisional: played < PROVISIONAL_BELOW,
+    provisional: isProvisional(played),
+    established: !isProvisional(played),
+    leaderboardOptOut: Number(row.leaderboard_opt_out) === 1,
     latitude: row.latitude ?? null,
     longitude: row.longitude ?? null,
     homeFacilityId: row.home_facility_id ?? null,
@@ -273,6 +307,11 @@ function presentMatch(db: DatabaseSync, match: MatchRow, publicBaseUrl: string) 
     sessionStatus: session?.status ?? null,
     simulated: Number(match.simulated) === 1,
     ratingsApplied: Number(match.ratings_applied) === 1,
+    resultStatus: match.result_status ?? (Number(match.ratings_applied) === 1 ? 'verified' : 'none'),
+    submittedBy: match.submitted_by ?? null,
+    confirmedBy: match.confirmed_by ?? null,
+    disputedBy: match.disputed_by ?? null,
+    scoreTarget: match.score_target == null ? null : Number(match.score_target),
     teams: { A: team('A'), B: team('B') },
   };
 }
@@ -336,8 +375,55 @@ function ensurePlayerColumns(db: DatabaseSync): void {
   add('latitude', 'REAL');
   add('longitude', 'REAL');
   add('home_facility_id', 'TEXT');
+  add('leaderboard_opt_out', 'INTEGER NOT NULL DEFAULT 0');
   if (addedDemo && names.has('is_demo')) db.exec('UPDATE players SET demo = is_demo');
   if (addedGuest && names.has('is_guest')) db.exec('UPDATE players SET guest = is_guest');
+}
+
+function ensureExtraColumns(db: DatabaseSync, table: string, columns: [string, string][]) {
+  const names = new Set((db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]).map((column) => column.name));
+  if (names.size === 0) return;
+  for (const [name, definition] of columns) {
+    if (!names.has(name)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${name} ${definition}`);
+  }
+}
+
+/** One-time map of Elo integers (1500-style) onto the 2.0–5.0 scale. A later ensure does not convert again. */
+function migrateRatingScale(db: DatabaseSync): void {
+  db.exec('CREATE TABLE IF NOT EXISTS app_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)');
+  const done = db.prepare(`SELECT value FROM app_meta WHERE key = 'rating_scale'`).get() as { value: string } | undefined;
+  if (done?.value === 'playback-1.0') return;
+  const convert = (value: number) => (value >= 100 ? toPlayback(value) : value);
+  for (const row of db.prepare('SELECT id, pir_rating FROM players').all() as { id: string; pir_rating: number }[]) {
+    const stored = Number(row.pir_rating);
+    if (stored >= 100) db.prepare('UPDATE players SET pir_rating = ? WHERE id = ?').run(convert(stored), row.id);
+  }
+  const history = db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'rating_history'").get();
+  if (history) {
+    const rows = db.prepare('SELECT match_id, player_id, rating_before, rating_after FROM rating_history').all() as {
+      match_id: string;
+      player_id: string;
+      rating_before: number;
+      rating_after: number;
+    }[];
+    const update = db.prepare('UPDATE rating_history SET rating_before = ?, rating_after = ? WHERE match_id = ? AND player_id = ?');
+    for (const row of rows) {
+      const before = Number(row.rating_before);
+      const after = Number(row.rating_after);
+      if (before >= 100 || after >= 100) update.run(convert(before), convert(after), row.match_id, row.player_id);
+    }
+  }
+  const queue = db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'queue_entries'").get();
+  if (queue) {
+    const rows = db.prepare('SELECT id, rating_snapshot FROM queue_entries').all() as { id: string; rating_snapshot: number }[];
+    const update = db.prepare('UPDATE queue_entries SET rating_snapshot = ? WHERE id = ?');
+    for (const row of rows) {
+      const stored = Number(row.rating_snapshot);
+      if (stored >= 100) update.run(convert(stored), row.id);
+    }
+  }
+  db.prepare(`UPDATE matches SET result_status = 'verified' WHERE ratings_applied = 1 AND (result_status IS NULL OR result_status = 'none')`).run();
+  db.prepare(`INSERT INTO app_meta (key, value) VALUES ('rating_scale', 'playback-1.0')`).run();
 }
 
 export function ensureClubSchema(db: DatabaseSync): void {
@@ -359,10 +445,26 @@ export function ensureClubSchema(db: DatabaseSync): void {
   }
   db.exec(SCHEMA);
   ensurePlayerColumns(db);
+  ensureExtraColumns(db, 'matches', [
+    ['result_status', "TEXT NOT NULL DEFAULT 'none'"],
+    ['submitted_by', 'TEXT'],
+    ['confirmed_by', 'TEXT'],
+    ['disputed_by', 'TEXT'],
+    ['score_target', 'INTEGER'],
+  ]);
+  ensureExtraColumns(db, 'rating_history', [
+    ['algorithm_version', 'TEXT'],
+    ['delta', 'REAL'],
+    ['won', 'INTEGER'],
+    ['explanation', 'TEXT'],
+    ['band_before', 'TEXT'],
+    ['band_after', 'TEXT'],
+  ]);
   ensureDemoSchema(db);
   const now = new Date().toISOString();
   insertSeed(db, now);
   seedDemoPlay(db, now);
+  migrateRatingScale(db);
   db.prepare(`UPDATE players SET demo = 1, guest = 0 WHERE id LIKE 'demo-%' AND demo = 0`).run();
 }
 
@@ -405,7 +507,8 @@ export function getPlayer(db: DatabaseSync, id: string, publicBaseUrl: string) {
   if (!row) throw new ClubError('not_found');
   const history = db
     .prepare(
-      `SELECT match_id, rating_before, rating_after, confidence_before, confidence_after, created_at
+      `SELECT match_id, rating_before, rating_after, confidence_before, confidence_after, created_at,
+              algorithm_version, delta, won, explanation, band_before, band_after
        FROM rating_history WHERE player_id = ? ORDER BY created_at`,
     )
     .all(id) as {
@@ -415,10 +518,17 @@ export function getPlayer(db: DatabaseSync, id: string, publicBaseUrl: string) {
     confidence_before: number;
     confidence_after: number;
     created_at: string;
+    algorithm_version: string | null;
+    delta: number | null;
+    won: number | bigint | null;
+    explanation: string | null;
+    band_before: string | null;
+    band_after: string | null;
   }[];
   const matches = db
     .prepare(
-      `SELECT m.id, m.court_id, m.mode, m.status, mp.team, m.score_a, m.score_b, m.winner, m.created_at, m.simulated, m.session_token
+      `SELECT m.id, m.court_id, m.mode, m.status, mp.team, m.score_a, m.score_b, m.winner, m.created_at, m.simulated,
+              m.session_token, m.result_status, m.ratings_applied
        FROM match_players mp JOIN matches m ON m.id = mp.match_id
        WHERE mp.player_id = ? ORDER BY m.created_at DESC`,
     )
@@ -434,15 +544,67 @@ export function getPlayer(db: DatabaseSync, id: string, publicBaseUrl: string) {
     created_at: string;
     simulated: number | bigint;
     session_token: string | null;
+    result_status: string | null;
+    ratings_applied: number | bigint;
   }[];
+  const historyByMatch = new Map(history.map((point) => [point.match_id, point]));
+  const ids = matches.map((match) => match.id);
+  const roster = ids.length
+    ? (db
+        .prepare(
+          `SELECT mp.match_id, mp.player_id, mp.team, p.display_name FROM match_players mp
+           JOIN players p ON p.id = mp.player_id WHERE mp.match_id IN (${ids.map(() => '?').join(', ')})`,
+        )
+        .all(...ids) as { match_id: string; player_id: string; team: TeamId; display_name: string }[])
+    : [];
+  const ratedMatches = matches.map((match) => {
+    const point = historyByMatch.get(match.id);
+    const mates = roster.filter((person) => person.match_id === match.id);
+    const teammate = mates.find((person) => person.team === match.team && person.player_id !== id) ?? null;
+    const opponents = mates.filter((person) => person.team !== match.team);
+    const scoreFor = match.team === 'A' ? nullable(match.score_a) : nullable(match.score_b);
+    const scoreAgainst = match.team === 'A' ? nullable(match.score_b) : nullable(match.score_a);
+    const verified = Number(match.ratings_applied) === 1;
+    const won = point ? Number(point.won) === 1 : match.winner === match.team;
+    const resultStatus = match.result_status ?? 'none';
+    const result = verified ? (won ? 'win' : 'loss') : resultStatus === 'disputed' ? 'disputed' : resultStatus === 'pending' ? 'pending' : 'unverified';
+    return {
+      id: match.id,
+      at: point?.created_at ?? match.created_at,
+      courtId: match.court_id,
+      mode: match.mode,
+      team: match.team,
+      teammate: teammate ? { id: teammate.player_id, displayName: teammate.display_name } : null,
+      opponents: opponents.map((person) => ({ id: person.player_id, displayName: person.display_name })),
+      scoreFor,
+      scoreAgainst,
+      result,
+      ratingBefore: point ? n(point.rating_before) : null,
+      ratingAfter: point ? n(point.rating_after) : null,
+      ratingChange: point ? n(point.rating_after) - n(point.rating_before) : null,
+      explanation: point?.explanation ?? null,
+      algorithmVersion: point?.algorithm_version ?? null,
+      sessionToken: match.session_token,
+      demo: Number(match.simulated) === 1 || row.id.startsWith('demo-'),
+      verified,
+    };
+  });
+  const lastMatchAt = matches.reduce<string | null>((latest, match) => {
+    if (!latest || match.created_at > latest) return match.created_at;
+    return latest;
+  }, null);
   return {
     ...presentPlayer(row, publicBaseUrl),
+    lastMatchAt,
     history: history.map((point) => ({
       matchId: point.match_id,
       ratingBefore: n(point.rating_before),
       ratingAfter: n(point.rating_after),
-      confidenceBefore: point.confidence_before,
-      confidenceAfter: point.confidence_after,
+      confidenceBefore: point.band_before ?? point.confidence_before,
+      confidenceAfter: point.band_after ?? point.confidence_after,
+      delta: point.delta == null ? n(point.rating_after) - n(point.rating_before) : point.delta,
+      explanation: point.explanation,
+      algorithmVersion: point.algorithm_version,
       at: point.created_at,
     })),
     matches: matches.map((match) => ({
@@ -458,23 +620,65 @@ export function getPlayer(db: DatabaseSync, id: string, publicBaseUrl: string) {
       simulated: Number(match.simulated) === 1,
       sessionToken: match.session_token,
     })),
+    ratedMatches,
     unmeasured: { serveSpeed: null, shotPlacement: null, movement: null },
     simulatedAnalytics: ANALYTICS,
   };
 }
 
-export function createGuest(db: DatabaseSync, displayName: string, language: 'en' | 'vi', publicBaseUrl: string) {
+export function createGuest(
+  db: DatabaseSync,
+  displayName: string,
+  language: 'en' | 'vi',
+  publicBaseUrl: string,
+  start?: { category?: string; rating?: number },
+) {
   const now = new Date().toISOString();
   const id = `guest-${randomBytes(6).toString('base64url')}`;
+  const category = start?.category;
+  const allowed = category === 'beginner' || category === 'intermediate' || category === 'advanced' || category === 'expert';
+  let rating = PIR_START;
+  try {
+    if (start?.rating !== undefined) rating = startingRating(allowed ? category : 'intermediate', start.rating);
+    else if (allowed) rating = startingRating(category);
+  } catch (error) {
+    if (error instanceof Error && error.message === 'invalid_start') throw new ClubError('invalid_start');
+    throw error;
+  }
   db.prepare(
     `INSERT INTO players (
       id, display_name, language, skill, preferred_hand, pir_rating, wins, losses, matches_played,
       equipment_json, equipment_consent_at, recording_consent_at, demo, guest, created_at, updated_at
     ) VALUES (?, ?, ?, NULL, NULL, ?, 0, 0, 0, NULL, NULL, NULL, 0, 1, ?, ?)`,
-  ).run(id, displayName, language, PIR_START, now, now);
+  ).run(id, displayName, language, rating, now, now);
   const row = playerById(db, id);
   if (!row) throw new ClubError('not_found');
   return presentPlayer(row, publicBaseUrl);
+}
+
+export function setStartingRating(
+  db: DatabaseSync,
+  id: string,
+  category: string | undefined,
+  precise: number | undefined,
+  publicBaseUrl: string,
+) {
+  const row = playerById(db, id);
+  if (!row) throw new ClubError('not_found');
+  if (n(row.matches_played) > 0) throw new ClubError('already_played');
+  const history = db.prepare('SELECT 1 FROM rating_history WHERE player_id = ? LIMIT 1').get(id);
+  if (history) throw new ClubError('already_played');
+  const allowed = category === 'beginner' || category === 'intermediate' || category === 'advanced' || category === 'expert';
+  if (!allowed) throw new ClubError('invalid_start');
+  let rating: number;
+  try {
+    rating = startingRating(category as StartCategory, precise);
+  } catch (error) {
+    if (error instanceof Error && error.message === 'invalid_start') throw new ClubError('invalid_start');
+    throw error;
+  }
+  db.prepare('UPDATE players SET pir_rating = ?, updated_at = ? WHERE id = ? AND matches_played = 0').run(rating, new Date().toISOString(), id);
+  return presentPlayer(playerById(db, id)!, publicBaseUrl);
 }
 
 const LOCKED = new Set(['rating', 'pir', 'wins', 'losses', 'confidence', 'matchesPlayed', 'pirRating']);
@@ -519,9 +723,10 @@ export function updatePlayer(
     }
   }
   const now = new Date().toISOString();
+  const optOut = typeof body.leaderboardOptOut === 'boolean' ? (body.leaderboardOptOut ? 1 : 0) : Number(row.leaderboard_opt_out) === 1 ? 1 : 0;
   db.prepare(
-    `UPDATE players SET display_name = ?, language = ?, skill = ?, preferred_hand = ?, equipment_json = ?, equipment_consent_at = ?, updated_at = ? WHERE id = ?`,
-  ).run(displayName, language, skill, hand, equipment, consentAt, now, id);
+    `UPDATE players SET display_name = ?, language = ?, skill = ?, preferred_hand = ?, equipment_json = ?, equipment_consent_at = ?, leaderboard_opt_out = ?, updated_at = ? WHERE id = ?`,
+  ).run(displayName, language, skill, hand, equipment, consentAt, optOut, now, id);
   return presentPlayer(playerById(db, id)!, publicBaseUrl);
 }
 
@@ -662,48 +867,11 @@ export function confirmMatchScore(db: DatabaseSync, matchId: string, scoreA: num
   return presentMatch(db, requireMatch(db, match.id), publicBaseUrl);
 }
 
-export function verifyMatch(db: DatabaseSync, matchId: string, publicBaseUrl: string) {
+export function verifyMatch(db: DatabaseSync, matchId: string, _publicBaseUrl: string) {
   const match = requireMatch(db, matchId);
-  const guard = verifyGuard(match.status, Number(match.ratings_applied) === 1);
-  if (guard === 'already_applied') throw new ClubError('already_verified');
-  if (guard === 'not_completed') throw new ClubError('not_completed');
-  if (match.winner !== 'A' && match.winner !== 'B') throw new ClubError('not_completed');
-  const slots = slotsOf(db, match.id);
-  const load = (team: TeamId): PirPlayer[] =>
-    slots
-      .filter((slot) => slot.team === team)
-      .map((slot) => {
-        const player = playerById(db, slot.playerId);
-        if (!player) throw new ClubError('not_found');
-        return { id: player.id, rating: n(player.pir_rating), matchesPlayed: n(player.matches_played) };
-      });
-  const updates = applyMatchResult(load('A'), load('B'), match.winner);
-  const now = new Date().toISOString();
-  db.exec('BEGIN');
-  try {
-    const current = requireMatch(db, match.id);
-    if (verifyGuard(current.status, Number(current.ratings_applied) === 1) !== 'ok') throw new ClubError('already_verified');
-    const history = db.prepare(
-      `INSERT INTO rating_history (match_id, player_id, rating_before, rating_after, confidence_before, confidence_after, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    );
-    const apply = db.prepare(
-      `UPDATE players SET pir_rating = ?, wins = wins + ?, losses = losses + ?, matches_played = ?, updated_at = ? WHERE id = ?`,
-    );
-    for (const update of updates) {
-      history.run(match.id, update.id, update.ratingBefore, update.ratingAfter, update.confidenceBefore, update.confidenceAfter, now);
-      apply.run(update.ratingAfter, update.won ? 1 : 0, update.won ? 0 : 1, update.matchesPlayed, now, update.id);
-    }
-    const info = db
-      .prepare(`UPDATE matches SET status = 'verified', verified_at = ?, ratings_applied = 1, updated_at = ? WHERE id = ? AND status = 'completed' AND ratings_applied = 0`)
-      .run(now, now, match.id);
-    if (Number(info.changes) !== 1) throw new ClubError('already_verified');
-    db.exec('COMMIT');
-  } catch (error) {
-    db.exec('ROLLBACK');
-    throw error;
-  }
-  return presentMatch(db, requireMatch(db, match.id), publicBaseUrl);
+  if (Number(match.ratings_applied) === 1 || match.status === 'verified') throw new ClubError('already_verified');
+  // A saved recording or a typed score is not verification. The other team confirms.
+  throw new ClubError(match.status === 'completed' ? 'confirmation_required' : 'not_completed');
 }
 
 export function getMatch(db: DatabaseSync, matchId: string, publicBaseUrl: string) {
@@ -724,7 +892,7 @@ export function recommendFromIds(db: DatabaseSync, ids: string[]) {
   const players = ids.map((id) => {
     const player = playerById(db, id);
     if (!player) throw new ClubError('not_found');
-    return { id: player.id, displayName: player.display_name, rating: n(player.pir_rating) };
+    return { id: player.id, displayName: player.display_name, rating: toPlayback(n(player.pir_rating)) };
   });
   try {
     return recommendDoubles(players);

@@ -15,6 +15,7 @@ import {
   type TeamId,
 } from '../clubApi';
 import { useI18n } from '../i18n/context';
+import { formatRating } from '../i18n/format';
 import { Button } from './Ui';
 
 const teamStyle = {
@@ -148,7 +149,7 @@ export function CheckInPanel({ courtId }: { courtId: string }) {
           <li key={player.id} className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-line bg-card px-3 py-2">
             <span>
               <span className="font-semibold">{player.displayName}</span>
-              <span className="ml-2 text-sm text-muted">PIR {player.rating}</span>
+              <span className="ml-2 text-sm text-muted tabular-nums">{formatRating(player.rating)}</span>
               {player.demo ? <span className="ml-2 rounded-full bg-line px-2 py-0.5 text-xs font-semibold text-muted">{t('demoBadge')}</span> : null}
             </span>
             <span className="flex gap-2">

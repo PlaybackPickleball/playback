@@ -138,7 +138,7 @@ describe('matching: ranking', () => {
 
   it('ranks a closer match with closer skill higher', () => {
     const best = asMatch(target({ id: 'best', location: MAIN, minLevel: 3.3, maxLevel: 3.7 }));
-    const worse = asMatch(target({ id: 'worse', location: BINH_THANH, minLevel: 2.6, maxLevel: 3.0 }));
+    const worse = asMatch(target({ id: 'worse', location: BINH_THANH, minLevel: 3.05, maxLevel: 3.4 }));
     const out = rankMatches(seeker(), [worse, best], ctx());
     expect(out.ranked.map((r) => r.item.id)).toEqual(['best', 'worse']);
     expect(out.ranked[0].result.score).toBeGreaterThan(out.ranked[1].result.score);

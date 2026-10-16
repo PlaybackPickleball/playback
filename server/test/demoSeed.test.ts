@@ -4,6 +4,7 @@ import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { DEMO_FACILITY_ID, DEMO_RADIUS_KM } from '../src/demoSeed.js';
 import { ensureClubSchema, listFacilities, listPlayers, resetDemo } from '../src/club.js';
+import { toPlayback } from '../src/playbackRating.js';
 import { Store } from '../src/db.js';
 import { haversineKm } from '../src/geo.js';
 
@@ -44,13 +45,13 @@ describe('demo seed', () => {
     const demo = listPlayers(db, 'http://x').filter((p) => p.demo);
     expect(demo).toHaveLength(20);
     const ratings = demo.map((p) => p.rating);
-    expect(Math.min(...ratings)).toBeLessThanOrEqual(1350);
-    expect(Math.max(...ratings)).toBeGreaterThanOrEqual(1650);
-    expect(new Set(demo.map((p) => p.confidence)).size).toBeGreaterThan(8);
+    expect(Math.min(...ratings)).toBeLessThanOrEqual(2.75);
+    expect(Math.max(...ratings)).toBeGreaterThanOrEqual(4.5);
+    expect(new Set(demo.map((p) => p.confidence))).toEqual(new Set(['low', 'medium', 'high']));
     const fresh = demo.filter((p) => p.matchesPlayed === 0);
     expect(fresh.length).toBeGreaterThanOrEqual(4);
-    expect(fresh.every((p) => p.provisional && p.confidence === 0)).toBe(true);
-    expect(demo.some((p) => !p.provisional && p.confidence > 0.8)).toBe(true);
+    expect(fresh.every((p) => p.provisional && !p.established && p.confidence === 'low')).toBe(true);
+    expect(demo.some((p) => p.established && p.confidence === 'high')).toBe(true);
     expect(demo.every((p) => p.latitude !== null && p.longitude !== null && p.homeFacilityId)).toBe(true);
     expect(new Set(demo.map((p) => p.language))).toEqual(new Set(['en', 'vi']));
     expect(demo.every((p) => /\s/.test(p.displayName))).toBe(true);
@@ -100,7 +101,7 @@ describe('demo seed', () => {
     expect(count(db, `SELECT COUNT(*) AS n FROM match_players WHERE match_id = 'real-match'`)).toBe(1);
     expect(count(db, `SELECT COUNT(*) AS n FROM matches WHERE id = 'demo-match'`)).toBe(0);
     expect(count(db, `SELECT COUNT(*) AS n FROM sessions WHERE id = 's1'`)).toBe(1);
-    expect(count(db, `SELECT pir_rating AS n FROM players WHERE id = 'demo-lan'`)).toBe(1680);
+    expect(count(db, `SELECT pir_rating AS n FROM players WHERE id = 'demo-lan'`)).toBeCloseTo(4.4, 5);
     expect(count(db, 'SELECT COUNT(*) AS n FROM players WHERE demo = 1')).toBe(20);
     expect(count(db, 'SELECT COUNT(*) AS n FROM courts')).toBe(17);
   });
@@ -163,7 +164,7 @@ describe('demo seed', () => {
       'latitude',
       'longitude',
     ]);
-    expect(count(db, `SELECT pir_rating AS n FROM players WHERE id = 'guest-real'`)).toBe(1555);
+    expect(count(db, `SELECT pir_rating AS n FROM players WHERE id = 'guest-real'`)).toBeCloseTo(toPlayback(1555), 5);
     expect(count(db, `SELECT guest AS n FROM players WHERE id = 'guest-real'`)).toBe(1);
     expect(count(db, `SELECT demo AS n FROM players WHERE id = 'guest-real'`)).toBe(0);
     expect(count(db, 'SELECT COUNT(*) AS n FROM players WHERE demo = 1')).toBe(20);

@@ -1,9 +1,9 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { RECORDING_COURT } from './config.js';
 
-// Demo data for Play Now. Every row written here is marked demo = 1 and is never shown as real.
-// Ratings are PIR (Elo scale, 1500 start). Skill level is about 3.5 + (PIR - 1500) / 200, so
-// 1300 reads as 2.5 and 1700 as 4.5. Confidence is derived from matches_played by pir.confidence().
+// Demo data for Play Now. Ratings are Playback Rating on the 2.0–5.0 scale (not DUPR).
+// A legacy Elo integer still converts as 3.5 + (elo - 1500) / 200. Confidence is Low / Medium / High
+// from verified matches, not a probability.
 
 export const DEMO_FACILITY_ID = 'demo-facility';
 export const DEMO_FACILITY_NAME = 'PlayBack Demo Club';
@@ -87,18 +87,18 @@ const Q7 = 'demo-facility-quan-7';
 
 // 12 players added to the 8 in club.ts. Four are brand new: provisional rating, zero matches.
 export const DEMO_EXTRA_PLAYERS: DemoExtraPlayer[] = [
-  { id: 'demo-linh', displayName: 'Linh Ngô', language: 'vi', skill: 'beginner', hand: 'right', rating: 1300, matches: 4, wins: 1, latitude: 10.806, longitude: 106.738, homeFacilityId: MAIN },
-  { id: 'demo-hung', displayName: 'Hùng Trịnh', language: 'vi', skill: 'beginner', hand: 'right', rating: 1350, matches: 0, wins: 0, latitude: 10.8, longitude: 106.745, homeFacilityId: MAIN },
-  { id: 'demo-thao', displayName: 'Thảo Đặng', language: 'vi', skill: 'beginner', hand: 'left', rating: 1430, matches: 7, wins: 3, latitude: 10.795, longitude: 106.72, homeFacilityId: BT },
-  { id: 'demo-nam', displayName: 'Nam Phan', language: 'vi', skill: 'intermediate', hand: 'right', rating: 1470, matches: 12, wins: 6, latitude: 10.789, longitude: 106.713, homeFacilityId: BT },
-  { id: 'demo-trang', displayName: 'Trang Dương', language: 'en', skill: 'intermediate', hand: 'either', rating: 1500, matches: 0, wins: 0, latitude: 10.81, longitude: 106.735, homeFacilityId: MAIN },
-  { id: 'demo-duc', displayName: 'Đức Lý', language: 'vi', skill: 'intermediate', hand: 'right', rating: 1540, matches: 21, wins: 12, latitude: 10.741, longitude: 106.707, homeFacilityId: Q7 },
-  { id: 'demo-phuong', displayName: 'Phương Hồ', language: 'vi', skill: 'intermediate', hand: 'left', rating: 1570, matches: 30, wins: 17, latitude: 10.735, longitude: 106.714, homeFacilityId: Q7 },
-  { id: 'demo-vy', displayName: 'Vy Cao', language: 'en', skill: 'beginner', hand: 'right', rating: 1480, matches: 0, wins: 0, latitude: 10.792, longitude: 106.718, homeFacilityId: BT },
-  { id: 'demo-bao', displayName: 'Bảo Tạ', language: 'vi', skill: 'advanced', hand: 'right', rating: 1630, matches: 38, wins: 24, latitude: 10.802, longitude: 106.743, homeFacilityId: MAIN },
-  { id: 'demo-chi', displayName: 'Chi Mai', language: 'vi', skill: 'advanced', hand: 'right', rating: 1660, matches: 52, wins: 33, latitude: 10.798, longitude: 106.749, homeFacilityId: MAIN },
-  { id: 'demo-dung', displayName: 'Dũng Châu', language: 'vi', skill: 'advanced', hand: 'left', rating: 1700, matches: 64, wins: 44, latitude: 10.74, longitude: 106.705, homeFacilityId: Q7 },
-  { id: 'demo-yen', displayName: 'Yến Thái', language: 'en', skill: 'advanced', hand: 'right', rating: 1685, matches: 45, wins: 29, latitude: 10.787, longitude: 106.711, homeFacilityId: BT },
+  { id: 'demo-linh', displayName: 'Linh Ngô', language: 'vi', skill: 'beginner', hand: 'right', rating: 2.5, matches: 4, wins: 1, latitude: 10.806, longitude: 106.738, homeFacilityId: MAIN },
+  { id: 'demo-hung', displayName: 'Hùng Trịnh', language: 'vi', skill: 'beginner', hand: 'right', rating: 2.75, matches: 0, wins: 0, latitude: 10.8, longitude: 106.745, homeFacilityId: MAIN },
+  { id: 'demo-thao', displayName: 'Thảo Đặng', language: 'vi', skill: 'beginner', hand: 'left', rating: 3.15, matches: 7, wins: 3, latitude: 10.795, longitude: 106.72, homeFacilityId: BT },
+  { id: 'demo-nam', displayName: 'Nam Phan', language: 'vi', skill: 'intermediate', hand: 'right', rating: 3.35, matches: 12, wins: 6, latitude: 10.789, longitude: 106.713, homeFacilityId: BT },
+  { id: 'demo-trang', displayName: 'Trang Dương', language: 'en', skill: 'intermediate', hand: 'either', rating: 3.5, matches: 0, wins: 0, latitude: 10.81, longitude: 106.735, homeFacilityId: MAIN },
+  { id: 'demo-duc', displayName: 'Đức Lý', language: 'vi', skill: 'intermediate', hand: 'right', rating: 3.7, matches: 21, wins: 12, latitude: 10.741, longitude: 106.707, homeFacilityId: Q7 },
+  { id: 'demo-phuong', displayName: 'Phương Hồ', language: 'vi', skill: 'intermediate', hand: 'left', rating: 3.85, matches: 30, wins: 17, latitude: 10.735, longitude: 106.714, homeFacilityId: Q7 },
+  { id: 'demo-vy', displayName: 'Vy Cao', language: 'en', skill: 'beginner', hand: 'right', rating: 3.4, matches: 0, wins: 0, latitude: 10.792, longitude: 106.718, homeFacilityId: BT },
+  { id: 'demo-bao', displayName: 'Bảo Tạ', language: 'vi', skill: 'advanced', hand: 'right', rating: 4.15, matches: 38, wins: 24, latitude: 10.802, longitude: 106.743, homeFacilityId: MAIN },
+  { id: 'demo-chi', displayName: 'Chi Mai', language: 'vi', skill: 'advanced', hand: 'right', rating: 4.3, matches: 52, wins: 33, latitude: 10.798, longitude: 106.749, homeFacilityId: MAIN },
+  { id: 'demo-dung', displayName: 'Dũng Châu', language: 'vi', skill: 'advanced', hand: 'left', rating: 4.5, matches: 64, wins: 44, latitude: 10.74, longitude: 106.705, homeFacilityId: Q7 },
+  { id: 'demo-yen', displayName: 'Yến Thái', language: 'en', skill: 'advanced', hand: 'right', rating: 4.43, matches: 45, wins: 29, latitude: 10.787, longitude: 106.711, homeFacilityId: BT },
 ];
 
 // Locations for the 8 original demo players from club.ts (their ratings and matches are untouched).
