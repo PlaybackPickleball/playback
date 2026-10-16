@@ -1,0 +1,156 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+  --color-paper: #eef3f0;
+  --color-ink: #14211c;
+  --color-card: #fbfcfb;
+  --color-line: #d5e2db;
+  --color-accent: #0f766e;
+  --color-accent-dark: #115e59;
+  --color-muted: #4b5c55;
+}
+
+html {
+  font-family: var(--font-sans);
+  background: var(--color-paper);
+  color: var(--color-ink);
+  overflow-x: clip;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  line-height: 1.5;
+  background:
+    radial-gradient(900px 420px at 0% -10%, rgb(15 118 110 / 0.08), transparent 55%),
+    var(--color-paper);
+}
+
+#root {
+  min-width: 0;
+}
+
+:focus-visible {
+  outline: 3px solid #0f766e;
+  outline-offset: 3px;
+  box-shadow: 0 0 0 6px rgb(251 252 251 / 0.92);
+}
+
+dialog::backdrop {
+  background: rgb(20 33 28 / 0.46);
+}
+
+img,
+video,
+canvas,
+svg {
+  max-width: 100%;
+}
+
+p,
+h1,
+h2,
+dd,
+a,
+button,
+label {
+  overflow-wrap: break-word;
+}
+
+input,
+select,
+textarea {
+  max-width: 100%;
+}
+
+input[type='checkbox'],
+input[type='radio'] {
+  accent-color: #0f766e;
+}
+
+.scene {
+  position: relative;
+  isolation: isolate;
+  overflow: clip;
+  border-radius: 1.75rem;
+  background-color: #f4f7f5;
+}
+
+.scene-photo,
+.scene-scrim {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.scene-photo {
+  z-index: 0;
+  max-width: none;
+  object-fit: cover;
+}
+
+.scene-scrim {
+  z-index: 1;
+}
+
+.scene-light .scene-scrim {
+  background:
+    linear-gradient(180deg, rgb(251 252 251 / 0.9) 0%, rgb(246 249 247 / 0.84) 58%, rgb(246 249 247 / 0.76) 100%);
+}
+
+.scene-dark .scene-scrim {
+  background:
+    linear-gradient(180deg, rgb(12 28 26 / 0.2), rgb(12 28 26 / 0.42));
+}
+
+.scene-band .scene-scrim {
+  background:
+    linear-gradient(180deg, rgb(20 33 28 / 0.05) 0%, rgb(20 33 28 / 0.12) 55%, rgb(238 243 240 / 0.55) 100%);
+}
+
+.scene > :not(.scene-photo):not(.scene-scrim) {
+  position: relative;
+  z-index: 2;
+}
+
+.tap-screen {
+  overflow-x: clip;
+}
+
+.tap-target {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+}
+
+.panel {
+  border: 1px solid var(--color-line);
+  border-radius: 1.5rem;
+  background: var(--color-card);
+  box-shadow: 0 1px 2px rgb(20 33 28 / 0.04), 0 16px 40px rgb(20 33 28 / 0.05);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .rec-dot {
+    animation: rec-pulse 1.4s ease-in-out infinite;
+  }
+}
+
+@keyframes rec-pulse {
+  0%,
+  100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+}
